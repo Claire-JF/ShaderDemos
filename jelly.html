@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -112,27 +112,40 @@
 
     canvas.addEventListener('pointermove', (e) => {
       if (e.pointerType === 'touch') e.preventDefault();
+      // Mobile: require active drag; Desktop: hover updates without click
       if (e.pointerType === 'touch' && !pointerActive) return;
-      if (e.pointerType !== 'touch' && e.buttons === 0) return;
       setMouseFromPointerEvent(e);
     }, passiveFalse);
 
     canvas.addEventListener('pointerup', (e) => {
-      if (e.pointerType === 'touch') e.preventDefault();
-      pointerActive = false;
-      try { canvas.releasePointerCapture && canvas.releasePointerCapture(e.pointerId); } catch {}
-      toggle.style.pointerEvents = 'auto';
-      lastMouse.x = 0.0; lastMouse.y = 0.0;
-      if (sandbox && sandbox.setUniform) sandbox.setUniform('u_mouse_ext', 0.0, 0.0);
+      if (e.pointerType === 'touch') {
+        e.preventDefault();
+        pointerActive = false;
+        try { canvas.releasePointerCapture && canvas.releasePointerCapture(e.pointerId); } catch {}
+        toggle.style.pointerEvents = 'auto';
+        lastMouse.x = 0.0; lastMouse.y = 0.0;
+        if (sandbox && sandbox.setUniform) sandbox.setUniform('u_mouse_ext', 0.0, 0.0);
+      }
+      // For mouse, do nothing special so hover continues
     }, passiveFalse);
 
     window.addEventListener('pointercancel', (e) => {
-      pointerActive = false;
-      try { canvas.releasePointerCapture && canvas.releasePointerCapture(e.pointerId); } catch {}
-      toggle.style.pointerEvents = 'auto';
-      lastMouse.x = 0.0; lastMouse.y = 0.0;
-      if (sandbox && sandbox.setUniform) sandbox.setUniform('u_mouse_ext', 0.0, 0.0);
+      if (e.pointerType === 'touch') {
+        pointerActive = false;
+        try { canvas.releasePointerCapture && canvas.releasePointerCapture(e.pointerId); } catch {}
+        toggle.style.pointerEvents = 'auto';
+        lastMouse.x = 0.0; lastMouse.y = 0.0;
+        if (sandbox && sandbox.setUniform) sandbox.setUniform('u_mouse_ext', 0.0, 0.0);
+      }
     }, passiveFalse);
+
+    // Desktop: clear effect when leaving the canvas
+    canvas.addEventListener('pointerleave', (e) => {
+      if (e.pointerType !== 'touch') {
+        lastMouse.x = 0.0; lastMouse.y = 0.0;
+        if (sandbox && sandbox.setUniform) sandbox.setUniform('u_mouse_ext', 0.0, 0.0);
+      }
+    });
   </script>
 </body>
 </html>
