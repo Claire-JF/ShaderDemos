@@ -30,6 +30,35 @@
       backdrop-filter: blur(10px);
     }
 
+    /* Mobile: move controls to top center to avoid covering buttons */
+    @media (max-width: 768px) {
+      .panel.glass {
+        top: 56px;
+        left: 50%;
+        right: auto;
+        bottom: auto;
+        transform: translateX(-50%);
+        min-width: 180px;
+        max-width: 220px;
+        padding: 6px 8px;
+        border-radius: 8px;
+      }
+
+      .panel-header { gap: .35rem; margin-bottom: .25rem; }
+      .panel-header .title { font-size: 10px; }
+      .dot { width: 6px; height: 6px; }
+      .controls { gap: .4rem; }
+      .slider { gap: .2rem; }
+      .row { font-size: 9px; }
+      .icon-btn { width: 24px; height: 24px; }
+
+      input[type="range"]{ height: 16px; }
+      input[type="range"]::-webkit-slider-runnable-track{ height:3px; }
+      input[type="range"]::-webkit-slider-thumb{ width:10px; height:10px; margin-top:-3.5px; }
+      input[type="range"]::-moz-range-track{ height:3px; }
+      input[type="range"]::-moz-range-thumb{ width:10px; height:10px; }
+    }
+
     .panel-header { display:flex; align-items:center; gap:.5rem; margin-bottom:.4rem; }
     .panel-header .title { font-weight: 600; letter-spacing: .02em; font-size: 13px; color: var(--text); }
     .dot { width:8px; height:8px; border-radius:999px; display:inline-block; box-shadow:0 0 0 2px rgba(0,0,0,0.25) inset; }
