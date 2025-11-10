@@ -4,11 +4,13 @@ precision mediump float;
 
 uniform float u_time;
 uniform vec2  u_resolution;
-uniform vec2  u_mouse;
+uniform vec2  u_mouse_user;
 
 // ======= Noise =========
 float hash(vec2 p){
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
 }
 float noise(vec2 p){
     vec2 i = floor(p);
@@ -56,23 +58,23 @@ void main(){
     vec2 uv = (gl_FragCoord.xy / u_resolution.xy) * 2.0 - 1.0;
     uv.x *= u_resolution.x / u_resolution.y;
 
-    // normalized mouse
-    vec2 mouse = (u_mouse / u_resolution.xy) * 2.0 - 1.0;
+    // normalized mouse (from our own uniform, not GlslCanvas default)
+    vec2 mouse = (u_mouse_user / u_resolution.xy) * 2.0 - 1.0;
     mouse.x *= u_resolution.x / u_resolution.y;
 
     // lens parameters
     float LENS_RADIUS  = 0.35;
     float LENS_FEATHER = 0.20;
-    float LENS_ZOOM    = 1.5;
+    float LENS_ZOOM    = 1.8;
 
     // lens mask
     float d = length(uv - mouse);
     float mask = 1.0 - smoothstep(LENS_RADIUS - LENS_FEATHER, LENS_RADIUS, d);
 
     // lens UV
-    vec2 lensUV = mouse + (uv - mouse) / LENS_ZOOM; // basic zoom
-    float t = clamp(d / LENS_RADIUS, 0.0, 1.0); // distance factor
-    float barrel = 1.0 + 0.12 * t * t * (1.0 - t); // barrel distortion
+    vec2 lensUV = mouse + (uv - mouse) / LENS_ZOOM;
+    float t = clamp(d / LENS_RADIUS, 0.0, 1.0);
+    float barrel = 1.0 + 0.12 * t * t * (1.0 - t);
     lensUV = mouse + (uv - mouse) / (LENS_ZOOM * barrel);
 
     // mix with original UV
@@ -84,7 +86,7 @@ void main(){
     vec2 flow = vec2(cos(FLOW_ANGLE), sin(FLOW_ANGLE)) * (u_time * FLOW_SPEED);
 
     // albedo + texture drift
-    float pat = fbm(pUV * 3.0 + flow + vec2(123.45,234.56));
+    float pat = fbm(pUV * 3.0 + flow);
     vec3 albedo = mix(vec3(0.1,0.2,0.4), vec3(0.7,0.8,1.0), pat);
     albedo *= 0.8 + 0.4 * fbm(pUV * 2.0 + vec2(u_time*0.2,0.0) + flow*0.6);
 
@@ -122,11 +124,8 @@ void main(){
     color += vec3(0.03)*albedo*ao;
 
     // lens rim light
-    float inner = smoothstep(LENS_RADIUS - 0.04, LENS_RADIUS - 0.04 * 2.0, d);
-    float outer = smoothstep(LENS_RADIUS, LENS_RADIUS - 0.04, d);
-    float rim = outer - inner;
-    vec3 rimColor = vec3(0.8, 0.96, 1.0); 
-    color += rim * rimColor * 0.025;
+    float rim = smoothstep(LENS_RADIUS, LENS_RADIUS - LENS_FEATHER, d);
+    color = mix(color, color*vec3(0.98,1.00,1.02), 0.01*rim);
 
     // Tone map + gamma
     color = color / (color + vec3(1.0));
