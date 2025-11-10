@@ -207,44 +207,15 @@
     uniform float movementScale;
     
     varying vec4 v_color;
-
+    
+    //HSV to RGB (branchless), H in [0,1), S,V in [0,1]
     vec3 hsv2rgb(vec3 c) {
       c = vec3(c.x, clamp(c.yz, 0.0, 1.0));
       vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
       vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
       return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
     }
-
-    mat4 rotY( float angle ) {
-        float s = sin( angle );
-        float c = cos( angle );
-        
-        return mat4( 
-          c, 0,-s, 0,
-          0, 1, 0, 0,
-          s, 0, c, 0,
-          0, 0, 0, 1);  
-    }
-
-    mat4 rotZ( float angle ) {
-        float s = sin( angle );
-        float c = cos( angle );
-        
-        return mat4( 
-          c,-s, 0, 0, 
-          s, c, 0, 0,
-          0, 0, 1, 0,
-          0, 0, 0, 1); 
-    }
-
-    mat4 trans(vec3 trans) {
-      return mat4(
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        trans, 1);
-    }
-
+   // 4×4 Transform helpers
     mat4 ident() {
       return mat4(
         1, 0, 0, 0,
@@ -261,53 +232,63 @@
         0, 0, 0, 1);
     }
 
-    mat4 uniformScale(float s) {
-      return mat4(
-        s, 0, 0, 0,
-        0, s, 0, 0,
-        0, 0, s, 0,
-        0, 0, 0, 1);
-    }
-
     float hash(float p) {
       vec2 p2 = fract(vec2(p * 5.3983, p * 5.4427));
       p2 += dot(p2.yx, p2.xy + vec2(21.5351, 14.3137));
       return fract(p2.x * p2.y * 95.4337);
     }
-
+    
+    // Map [0,1] → [-1,1]
     float m1p1(float v) {
       return v * 2. - 1.;
     }
-
+    // Complement
     float inv(float v) {
       return 1. - v;
     }
-
-    float goop(float t) {
-      return sin(t) + sin(t * 0.27) + sin(t * 0.13) + sin(t * 0.73);
-    }
-
+    
+    // Assign id and a 2D seed from audio, produce a smooth points line.
+    // Multiple sin/cos with different frequencies → non-repeating path.
     vec3 getCenterPoint(const float id, vec2 seed) {
       float a0 = id + seed.x;
       float a1 = id + seed.y;
       return vec3(
         (sin(a0 * 0.39) + sin(a0 * 0.73) + sin(a0 * 1.27)) / 3.,
-        (sin(a1 * 0.43) + sin(a1 * 0.37) + cos(a1 * 1.73)) / 3.,
+        (sin(a1 * 0.43) + sin(a1 * 0.37) + cos(a1 * 1.73)) / 3., //keeps output within [-1,1]
         0);
     }
-
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Extrude one quad (two triangles, 6 vertices) along the curve centerline
+    //   quadId   : quad# along the line
+    //   pointId  : which of the 6 vertices (0..5) in this quad
+    //   thickness: half-width of the ribbon at this segment (audio-driven)
+    //   seed     : audio-driven phase offset for centerline noise
+    //   pos      : (out) generated vertex position (object space)
+    //   uv       : (out) quad-local (u,v) in {0,1}×{0,1}
+    // ─────────────────────────────────────────────────────────────────────────────
     void getQuadPoint(const float quadId, const float pointId, float thickness, vec2 seed, out vec3 pos, out vec2 uv) {
+      // Sample four nearby center points to estimate tangents robustly (central diff).
+      // p1→p2 is the current center segment; p0,p3 used for tangent line calculation.
       vec3 p0 = getCenterPoint(quadId + 0.0, seed);
       vec3 p1 = getCenterPoint(quadId + 0.1, seed);
       vec3 p2 = getCenterPoint(quadId + 0.2, seed);
       vec3 p3 = getCenterPoint(quadId + 0.3, seed);
+      
+      // Compute tangents: (dx,dy)->(-dy,dx))
       vec3 perp0 = normalize(p2 - p0).yxz * vec3(-1, 1, 0) * thickness;
       vec3 perp1 = normalize(p3 - p1).yxz * vec3(-1, 1, 0) * thickness;
-      
+
+      // Map the 6 vertex indices of a quad to two flags (avoid branching)
+      //  ux ∈ {0,1} → left/right side, vy ∈ {0,1} → near p1 / near p2
       float id = pointId;
       float ux = mod(id, 2.);
       float vy = mod(floor(id / 2.) + floor(id / 3.), 2.);
-      
+
+      // Compose final position:
+      // 1) Interpolate along the centerline: p1 → p2 by vy
+      // 2) Interpolate normals (perp0→perp1) by vy for smooth width/turn transitions
+      // 3) Pick left/right with ux ∈ {0,1} mapping to {-1,+1}
       pos = vec3(mix(p1, p2, vy) + mix(-1., 1., ux) * mix(perp0, perp1, vy)); 
       uv  = vec2(ux, vy);
     }
@@ -323,12 +304,17 @@
       vec3 pos;
       vec2 uv;
       
-      float snd0 = texture2D(sound, vec2(0.13 + lineId * 0.05, quadId / quadCount * 0.01)).a;
-      float snd1 = texture2D(sound, vec2(0.14 + lineId * 0.05, quadId / quadCount * 0.01)).a;
+      // Read from audio texture
+      float snd0 = texture2D(sound, vec2(0.13 + lineId * 0.05, quadId / quadCount * 0.01)).a; //low freq -> drum/bass
+      float snd1 = texture2D(sound, vec2(0.14 + lineId * 0.05, quadId / quadCount * 0.01)).a; //high freq -> vocal & others
       
-      // Match original linkage: thickness from pow(snd0, 5)
+      // Map audio to thickness
+      // pow(,5): small values shrink, peaks stand out.
       float sndAdjusted0 = pow(snd0, 5.0) * thicknessScale;
-      
+
+      // Generate ribbon geometry for this vertex (one corner of current quad)
+      // Curve parameter = quadId*0.02 + temporal drift (time*...)
+      //  - 0.02 makes adjacent segments close in param-space → smooth curve.
       getQuadPoint(
         quadId * 0.02 + time * 3.1 * (lineId + 1.), 
         pointId, 
@@ -337,18 +323,30 @@
         pos, 
         uv
       );  
-      
+
+      //Aspect-ratio correction
       vec3 aspect = vec3(resolution.y / resolution.x, 1, 1);
-      
+
+      // Project to clip space
       mat4 mat = ident(); 
       mat *= scale(aspect);
       gl_Position = vec4((mat * vec4(pos, 1)).xyz, 1);
-      gl_Position.z = -m1p1(quadId / quadCount);
+
+      // Push segments gradually in Z to create subtle layering
+      gl_Position.z = -m1p1(quadId / quadCount); // map 0..1 → -1..1, then negate → [-1,0]
+
+      //  spread lines across X by lineId
+      //  add small audio-driven sway using snd0 & 1
       gl_Position.x += m1p1(lineId / 10.) * 0.4 + (snd1 * snd0) * 0.10 * movementScale;
+      
       gl_PointSize = 4.;
+
+      // Per-vertex color: hue per-line, alpha grows along the line (for fade)
       float hue = mix(0.95, 1.5, lineId * 0.1);
       float sat = 1.;
       float val = 1.;
+
+      // multiply back into RGB for soft tailing
       v_color = vec4(hsv2rgb(vec3(hue, sat, val)), quadId / quadCount);
       v_color = vec4(v_color.rgb * v_color.a, v_color.a);
     }`;
@@ -642,3 +640,4 @@
   </script>
 </body>
 </html>
+
