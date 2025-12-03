@@ -7,7 +7,7 @@ uniform vec2  u_mouse;
 uniform vec2  u_resolution;
 
 //================== CONSTANTS ==================
-#define MAX_STEPS 100
+#define MAX_STEPS 50
 #define MAX_DIST  100.0
 #define SURF_DIST 0.001
 #define PI 3.14159265359
@@ -292,3 +292,4 @@ void main(){
     col = pow(col, vec3(0.4545));
     gl_FragColor = vec4(col, 1.0);
 }
+
