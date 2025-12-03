@@ -1,11 +1,10 @@
-#version 300 es
+#ifdef GL_ES
 precision highp float;
+#endif
 
 uniform float u_time;
 uniform vec2  u_mouse;
 uniform vec2  u_resolution;
-
-out vec4 fragColor;
 
 //================== CONSTANTS ==================
 #define MAX_STEPS 100
@@ -291,8 +290,5 @@ void main(){
 
     // Gamma
     col = pow(col, vec3(0.4545));
-    fragColor = vec4(col, 1.0);
+    gl_FragColor = vec4(col, 1.0);
 }
-
-
-
